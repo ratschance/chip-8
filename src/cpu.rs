@@ -5,7 +5,7 @@ struct Cpu {
 }
 
 struct Registers {
-    v: [u8; 16],     // Vx where x is a hexidecimal digit 0..F
+    v: [u8; 16],     // Vx where x is a hexadecimal digit 0..F
     i: u16,          // Generally used to store memory addresses
     delay_timer: u8,
     sound_timer: u8,
@@ -143,7 +143,7 @@ impl Cpu {
                         //TODO: unimplemented
                     },
                     0xa1 => {
-                        // ExA1 - SKNP Vx - Skip next instruction if ket with value of Vx is not pressed
+                        // ExA1 - SKNP Vx - Skip next instruction if key with value of Vx is not pressed
                         //TODO: unimplemented
                     },
                     _ => panic!("Invalid opcode: {}", opcode)
