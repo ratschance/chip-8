@@ -47,7 +47,11 @@ impl Cpu {
                     },
                     0x00ee => {
                         // RET - return from subroutine
-                        //TODO: unimplemented
+                        if self.registers.sp == 0 {
+                            panic!("Returned when stack pointer was already 0");
+                        }
+                        self.registers.pc = self.registers.stack[self.registers.sp as usize];
+                        self.registers.sp -= 1;
                     },
                     _ => {
                         // Legacy routine, ignored
@@ -56,13 +60,13 @@ impl Cpu {
             },
             0x1 => {
                 // 1nnn - JP addr - Jump to location nnn
-                let loc = opcode & 0xfff;
-                //TODO: unimplemented
+                self.registers.pc = opcode & 0xfff;
             },
             0x2 => {
                 // 2nnn - CALL addr - Call subroutine at nnn
-                let loc = opcode & 0xfff;
-                //TODO: unimplemented
+                self.registers.sp += 1;
+                self.registers.stack[self.registers.sp as usize] = self.registers.pc;
+                self.registers.pc = opcode & 0xfff;
             },
             0x3 => {
                 // 3xkk - SE Vx, byte - Skip next instruction if Vx = kk
@@ -119,7 +123,7 @@ impl Cpu {
             0xb => {
                 // Bnnn - JP V0, addr - Jump to location nnn + V0
                 let loc = opcode & 0xfff;
-                //TODO: unimplemented
+                self.registers.pc = loc + self.registers.v[0] as u16;
             },
             0xc => {
                 // Cxkk - RND Vx, byte - Set Vx := random byte AND kk
