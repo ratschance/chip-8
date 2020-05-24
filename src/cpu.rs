@@ -1,6 +1,7 @@
-pub struct Cpu{
+pub struct Cpu {
     registers: Registers,
     memory: [u8; 4096],
+    display: [[bool; 32]; 64],
 }
 
 struct Registers {
@@ -32,7 +33,41 @@ impl Cpu {
         Cpu {
             registers: Registers::initialize(),
             memory: [0; 4096],
+            display: [[false; 32]; 64],
         }
+    }
+
+    pub fn load_rom(&mut self, path: &str) {
+        use std::fs::File;
+        use std::io::prelude::*;
+
+        let mut rom = File::open(path).expect("Unable to open ROM");
+
+        let _ = rom
+            .read(&mut self.memory[512..])
+            .expect("Unable to read ROM into memory");
+    }
+
+    pub fn load_sprites(&mut self) {
+        let sprites = [
+            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+            0x20, 0x60, 0x20, 0x20, 0x70, // 1
+            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+        ];
+        self.memory[..sprites.len()].copy_from_slice(&sprites[..])
     }
 
     pub fn process_opcode(&mut self, opcode: u16) {
@@ -42,7 +77,11 @@ impl Cpu {
                 match opcode {
                     0x00e0 => {
                         // CLS - Clear display
-                        //TODO: unimplemented
+                        for i in 0..self.display.len() {
+                            for j in 0..self.display[i].len() {
+                                self.display[i][j] = false;
+                            }
+                        }
                     }
                     0x00ee => {
                         // RET - return from subroutine
