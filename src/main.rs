@@ -6,10 +6,9 @@ extern crate rand;
 
 use std::time::{Duration, Instant};
 
-use ggez::event;
+use ggez::event::{self, KeyCode, KeyMods};
 use ggez::graphics;
 use ggez::{Context, GameResult};
-
 
 const PIXEL_SIZE: usize = 10;
 const SCREEN_WIDTH: usize = cpu::C8_WIDTH * PIXEL_SIZE;
@@ -70,6 +69,53 @@ impl event::EventHandler for MainState {
         graphics::present(ctx)?;
         Ok(())
     }
+
+    fn key_down_event(
+        &mut self,
+        _ctx: &mut Context,
+        keycode: KeyCode,
+        _keymod: KeyMods,
+        _repeat: bool,
+    ) {
+        if let Some(idx) = get_idx_from_keycode(keycode) {
+            self.cpu.set_key_pressed(idx);
+        }
+    }
+
+    fn key_up_event(&mut self, _ctx: &mut Context, keycode: KeyCode, _keymods: KeyMods) {
+        if let Some(idx) = get_idx_from_keycode(keycode) {
+            self.cpu.set_key_released(idx)
+        }
+    }
+}
+
+fn get_idx_from_keycode(keycode: KeyCode) -> Option<usize> {
+    // Map keyboard keys to Chip-8 keys
+    //
+    //  1 2 3 4    1 2 3 C
+    //  q w e r -> 4 5 6 D
+    //  a s d f    7 8 9 E
+    //  z x c v    A 0 B F
+    let key = match keycode {
+        KeyCode::Key1 => 1,
+        KeyCode::Key2 => 2,
+        KeyCode::Key3 => 3,
+        KeyCode::Key4 => 0xC,
+        KeyCode::Q => 4,
+        KeyCode::W => 5,
+        KeyCode::E => 6,
+        KeyCode::R => 0xD,
+        KeyCode::A => 7,
+        KeyCode::S => 8,
+        KeyCode::D => 9,
+        KeyCode::F => 0xE,
+        KeyCode::Z => 0xA,
+        KeyCode::X => 0,
+        KeyCode::C => 0xB,
+        KeyCode::V => 0xF,
+        _ => return None,
+    };
+    Some(key)
 }
 
 fn main() -> GameResult {

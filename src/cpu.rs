@@ -7,6 +7,7 @@ pub struct Cpu {
     registers: Registers,
     memory: [u8; 4096],
     display: [[bool; C8_WIDTH]; C8_HEIGHT],
+    key_state: [bool; 16],
 }
 
 struct Registers {
@@ -39,6 +40,7 @@ impl Cpu {
             registers: Registers::initialize(),
             memory: [0; 4096],
             display: [[false; C8_WIDTH]; C8_HEIGHT],
+            key_state: [false; 16],
         }
     }
 
@@ -92,6 +94,14 @@ impl Cpu {
 
     pub fn view_display(&mut self) -> &[[bool; C8_WIDTH]; C8_HEIGHT] {
         &self.display
+    }
+
+    pub fn set_key_pressed(&mut self, key: usize) {
+        self.key_state[key] = true;
+    }
+
+    pub fn set_key_released(&mut self, key: usize) {
+        self.key_state[key] = false;
     }
 
     fn process_opcode(&mut self, opcode: u16) {
@@ -221,11 +231,15 @@ impl Cpu {
                 match opcode & 0xff {
                     0x9e => {
                         // Ex9E - SKP Vx - Skip next instruction if key with the value of Vx is pressed
-                        //TODO: unimplemented
+                        if self.key_state[self.registers.v[x] as usize] {
+                            self.registers.pc += 2;
+                        }
                     }
                     0xa1 => {
                         // ExA1 - SKNP Vx - Skip next instruction if key with value of Vx is not pressed
-                        //TODO: unimplemented
+                        if !self.key_state[self.registers.v[x] as usize] {
+                            self.registers.pc += 2;
+                        }
                     }
                     _ => panic!("Invalid opcode: {}", opcode),
                 }
@@ -310,7 +324,18 @@ impl Cpu {
             }
             0x0a => {
                 // Fx0A - LD Vx, K - Wait for a key press, store the value of the key in Vx
-                //TODO: unimplemented
+                let mut key_pressed = false;
+                for i in 0..16 {
+                    if self.key_state[i] {
+                        key_pressed = true;
+                        self.registers.v[x] = i as u8;
+                        break;
+                    }
+                }
+                if !key_pressed {
+                    // Decrement PC to keep the emulation on the same instruction
+                    self.registers.pc -= 2;
+                }
             }
             0x15 => {
                 // Fx15 - LD DT, Vx - Set delay timer := Vx
@@ -339,7 +364,7 @@ impl Cpu {
                     val /= 10;
                 }
                 let addr = self.registers.i as usize;
-                self.memory[addr..addr + 2].copy_from_slice(&out[..]);
+                self.memory[addr..addr + 3].copy_from_slice(&out[..]);
             }
             0x55 => {
                 // Fx55 - LD [I], Vx - Store registers V0 through Vx, in memory starting at location I
