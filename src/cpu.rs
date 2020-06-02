@@ -368,13 +368,13 @@ impl Cpu {
             }
             0x55 => {
                 // Fx55 - LD [I], Vx - Store registers V0 through Vx, in memory starting at location I
-                for i in 0..x {
+                for i in 0..=x {
                     self.memory[self.registers.i as usize + i] = self.registers.v[i];
                 }
             }
             0x65 => {
                 // Fx65 - LD Vx, [I] - Read registers V0 through Vx from memory starting at location I
-                for i in 0..x {
+                for i in 0..=x {
                     self.registers.v[i] = self.memory[self.registers.i as usize + i];
                 }
             }
