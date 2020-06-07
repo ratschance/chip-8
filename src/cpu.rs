@@ -8,6 +8,7 @@ pub struct Cpu {
     memory: [u8; 4096],
     display: [[bool; C8_WIDTH]; C8_HEIGHT],
     key_state: [bool; 16],
+    waiting: Option<usize>,
 }
 
 struct Registers {
@@ -41,6 +42,7 @@ impl Cpu {
             memory: [0; 4096],
             display: [[false; C8_WIDTH]; C8_HEIGHT],
             key_state: [false; 16],
+            waiting: None,
         }
     }
 
@@ -78,18 +80,20 @@ impl Cpu {
     }
 
     pub fn tick(&mut self) {
-        if self.registers.delay_timer > 0 {
-            self.registers.delay_timer -= 1;
-        }
+        if self.waiting == None {
+            if self.registers.delay_timer > 0 {
+                self.registers.delay_timer -= 1;
+            }
 
-        if self.registers.sound_timer > 0 {
-            //TODO: Make sound
-            self.registers.sound_timer -= 1;
-        }
+            if self.registers.sound_timer > 0 {
+                //TODO: Make sound
+                self.registers.sound_timer -= 1;
+            }
 
-        let pc = self.registers.pc as usize;
-        self.registers.pc += 2;
-        self.process_opcode((self.memory[pc] as u16) << 8 | self.memory[pc + 1] as u16);
+            let pc = self.registers.pc as usize;
+            self.registers.pc += 2;
+            self.process_opcode((self.memory[pc] as u16) << 8 | self.memory[pc + 1] as u16);
+        }
     }
 
     pub fn view_display(&mut self) -> &[[bool; C8_WIDTH]; C8_HEIGHT] {
@@ -98,6 +102,10 @@ impl Cpu {
 
     pub fn set_key_pressed(&mut self, key: usize) {
         self.key_state[key] = true;
+        if let Some(x) = self.waiting {
+            self.registers.v[x] = key as u8;
+            self.waiting = None;
+        }
     }
 
     pub fn set_key_released(&mut self, key: usize) {
@@ -209,6 +217,7 @@ impl Cpu {
                 let x = get_nibble(2, opcode);
                 let y = get_nibble(1, opcode);
                 let n = get_nibble(0, opcode);
+                let mut collision = false;
                 for i in 0..n {
                     let i_offset = self.registers.v[y] as usize + i;
                     let sprite = self.memory[self.registers.i as usize + i];
@@ -216,13 +225,18 @@ impl Cpu {
                         let j_offset = self.registers.v[x] as usize + j;
                         let pixel = (sprite >> (7 - j)) & 0x1;
 
-                        if j_offset < C8_WIDTH && i_offset < C8_HEIGHT && pixel == 0x1 {
+                        if  pixel == 0x1 {
                             if self.display[i_offset][j_offset] {
-                                self.registers.v[0xF] = 1;
+                                collision = true;
                             }
                             self.display[i_offset][j_offset] ^= true;
                         }
                     }
+                }
+                if collision {
+                    self.registers.v[0xF] = 1;
+                } else {
+                    self.registers.v[0xF] = 0;
                 }
             }
             0xe => {
@@ -324,18 +338,7 @@ impl Cpu {
             }
             0x0a => {
                 // Fx0A - LD Vx, K - Wait for a key press, store the value of the key in Vx
-                let mut key_pressed = false;
-                for i in 0..16 {
-                    if self.key_state[i] {
-                        key_pressed = true;
-                        self.registers.v[x] = i as u8;
-                        break;
-                    }
-                }
-                if !key_pressed {
-                    // Decrement PC to keep the emulation on the same instruction
-                    self.registers.pc -= 2;
-                }
+                self.waiting = Some(x)
             }
             0x15 => {
                 // Fx15 - LD DT, Vx - Set delay timer := Vx
