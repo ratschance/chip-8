@@ -9,6 +9,7 @@ pub struct Cpu {
     display: [[bool; C8_WIDTH]; C8_HEIGHT],
     key_state: [bool; 16],
     waiting: Option<usize>,
+    has_disp_update: bool,
 }
 
 struct Registers {
@@ -65,6 +66,7 @@ impl Cpu {
             display: [[false; C8_WIDTH]; C8_HEIGHT],
             key_state: [false; 16],
             waiting: None,
+            has_disp_update: false,
         }
     }
 
@@ -103,6 +105,8 @@ impl Cpu {
 
     pub fn tick(&mut self) {
         if self.waiting == None {
+            self.has_disp_update = false;
+
             if self.registers.delay_timer > 0 {
                 self.registers.delay_timer -= 1;
             }
@@ -132,6 +136,10 @@ impl Cpu {
 
     pub fn set_key_released(&mut self, key: usize) {
         self.key_state[key] = false;
+    }
+
+    pub fn has_disp_update(&self) -> bool {
+        self.has_disp_update
     }
 
     fn process_opcode(&mut self, opcode: u16) {
@@ -355,6 +363,7 @@ impl Cpu {
         } else {
             self.registers.v[0xF] = 0;
         }
+        self.has_disp_update = true;
     }
 
     /// Ex9E - SKP Vx - Skip next instruction if key with the value of Vx is pressed
