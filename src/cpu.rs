@@ -35,6 +35,28 @@ impl Registers {
     }
 }
 
+struct Opcode {
+    a: u8,
+    kk: u8,
+    n: u8,
+    nnn: u16,
+    x: usize,
+    y: usize,
+}
+
+impl Opcode {
+    pub fn from_op(op: u16) -> Self {
+        Opcode {
+            a: (op >> 12 & 0xf) as u8,
+            kk: (op & 0xff) as u8,
+            n: (op & 0xf) as u8,
+            nnn: op & 0xfff,
+            x: (op >> 8 & 0xf) as usize,
+            y: (op >> 4 & 0xf) as usize,
+        }
+    }
+}
+
 impl Cpu {
     pub fn initialize() -> Cpu {
         Cpu {
@@ -113,284 +135,297 @@ impl Cpu {
     }
 
     fn process_opcode(&mut self, opcode: u16) {
-        match opcode >> 12 {
-            0x0 => {
-                // 0xxx
-                match opcode {
-                    0x00e0 => {
-                        // CLS - Clear display
-                        for i in 0..self.display.len() {
-                            for j in 0..self.display[i].len() {
-                                self.display[i][j] = false;
-                            }
-                        }
-                    }
-                    0x00ee => {
-                        // RET - return from subroutine
-                        if self.registers.sp == 0 {
-                            panic!("Returned when stack pointer was already 0");
-                        }
-                        self.registers.pc = self.registers.stack[self.registers.sp as usize];
-                        self.registers.sp -= 1;
-                    }
-                    _ => {
-                        // Legacy routine, ignored
-                    }
-                }
-            }
-            0x1 => {
-                // 1nnn - JP addr - Jump to location nnn
-                self.registers.pc = opcode & 0xfff;
-            }
-            0x2 => {
-                // 2nnn - CALL addr - Call subroutine at nnn
-                self.registers.sp += 1;
-                self.registers.stack[self.registers.sp as usize] = self.registers.pc;
-                self.registers.pc = opcode & 0xfff;
-            }
-            0x3 => {
-                // 3xkk - SE Vx, byte - Skip next instruction if Vx = kk
-                let x = get_nibble(2, opcode);
-                if self.registers.v[x] == (opcode & 0xff) as u8 {
-                    self.registers.pc += 2;
-                }
-            }
-            0x4 => {
-                // 4xkk - SNE Vx, byte - Skip next instruction if Vx != kk
-                let x = get_nibble(2, opcode);
-                if self.registers.v[x] != (opcode & 0xff) as u8 {
-                    self.registers.pc += 2;
-                }
-            }
-            0x5 => {
-                // 5xy0 - SE Vx, Vy - Skip next instruction if Vx = Vy
-                let x = get_nibble(2, opcode);
-                let y = get_nibble(1, opcode);
-                if self.registers.v[x] == self.registers.v[y] {
-                    self.registers.pc += 2;
-                }
-            }
-            0x6 => {
-                // 6xkk - LD Vx, byte - Set Vx := kk
-                let x = get_nibble(2, opcode);
-                self.registers.v[x] = (opcode & 0xff) as u8;
-            }
-            0x7 => {
-                // 7xkk - ADD Vx, byte - Set Vx := Vx + kk
-                let x = get_nibble(2, opcode);
-                let val = self.registers.v[x].wrapping_add((opcode & 0xff) as u8);
-                self.registers.v[x] = val;
-            }
-            0x8 => {
-                // 8xyo - Operations between Vx and Vy depending on the value of o
-                let x = get_nibble(2, opcode);
-                let y = get_nibble(1, opcode);
-                let op = get_nibble(0, opcode) as u8;
-                self.process_opcode_8(x, y, op);
-            }
-            0x9 => {
-                // 9xy0 - SNE Vx, Vy - Skip next instruction if Vx != Vy
-                let x = get_nibble(2, opcode);
-                let y = get_nibble(1, opcode);
-                if self.registers.v[x] != self.registers.v[y] {
-                    self.registers.pc += 2;
-                }
-            }
-            0xa => {
-                // Annn - LD I, addr - Set I := nnn
-                self.registers.i = opcode & 0xfff;
-            }
-            0xb => {
-                // Bnnn - JP V0, addr - Jump to location nnn + V0
-                let loc = opcode & 0xfff;
-                self.registers.pc = loc + self.registers.v[0] as u16;
-            }
-            0xc => {
-                // Cxkk - RND Vx, byte - Set Vx := random byte AND kk
-                let x = get_nibble(2, opcode);
-                let kk = (opcode & 0xff) as u8;
-                let mut rng = rand::thread_rng();
-                self.registers.v[x] = rng.gen::<u8>() & kk;
-            }
-            0xd => {
-                // Dxyn - DRW Vx, Vy, nibble - Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
-                let x = get_nibble(2, opcode);
-                let y = get_nibble(1, opcode);
-                let n = get_nibble(0, opcode);
-                let mut collision = false;
-                for i in 0..n {
-                    let i_offset = self.registers.v[y] as usize + i;
-                    let sprite = self.memory[self.registers.i as usize + i];
-                    for j in 0..8 {
-                        let j_offset = self.registers.v[x] as usize + j;
-                        let pixel = (sprite >> (7 - j)) & 0x1;
-
-                        if  pixel == 0x1 {
-                            if self.display[i_offset][j_offset] {
-                                collision = true;
-                            }
-                            self.display[i_offset][j_offset] ^= true;
-                        }
-                    }
-                }
-                if collision {
-                    self.registers.v[0xF] = 1;
-                } else {
-                    self.registers.v[0xF] = 0;
-                }
-            }
-            0xe => {
-                // Exoo - Key operations with Vx depending on the value of oo
-                let x = get_nibble(2, opcode);
-                match opcode & 0xff {
-                    0x9e => {
-                        // Ex9E - SKP Vx - Skip next instruction if key with the value of Vx is pressed
-                        if self.key_state[self.registers.v[x] as usize] {
-                            self.registers.pc += 2;
-                        }
-                    }
-                    0xa1 => {
-                        // ExA1 - SKNP Vx - Skip next instruction if key with value of Vx is not pressed
-                        if !self.key_state[self.registers.v[x] as usize] {
-                            self.registers.pc += 2;
-                        }
-                    }
-                    _ => panic!("Invalid opcode: {}", opcode),
-                }
-            }
-            0xf => {
-                // Fxoo - Operations with Vx depending on the value of oo
-                let x = get_nibble(2, opcode);
-                let op = (opcode & 0xff) as u8;
-                self.process_opcode_f(x, op);
-            }
-            _ => panic!("Unhandled opcode: {}", opcode),
+        let op = Opcode::from_op(opcode);
+        match (op.a, op.x, op.y, op.n) {
+            (0x0, 0x0, 0xE, 0x0) => self.cls(),
+            (0x0, 0x0, 0xE, 0xE) => self.ret(),
+            (0x0, _, _, _) => self.sys(op.nnn),
+            (0x1, _, _, _) => self.jp(op.nnn),
+            (0x2, _, _, _) => self.call(op.nnn),
+            (0x3, _, _, _) => self.sec(op.x, op.kk),
+            (0x4, _, _, _) => self.snec(op.x, op.kk),
+            (0x5, _, _, 0x0) => self.se(op.x, op.y),
+            (0x6, _, _, _) => self.ldc(op.x, op.kk),
+            (0x7, _, _, _) => self.addc(op.x, op.kk),
+            (0x8, _, _, 0x0) => self.ld(op.x, op.y),
+            (0x8, _, _, 0x1) => self.or(op.x, op.y),
+            (0x8, _, _, 0x2) => self.and(op.x, op.y),
+            (0x8, _, _, 0x3) => self.xor(op.x, op.y),
+            (0x8, _, _, 0x4) => self.add(op.x, op.y),
+            (0x8, _, _, 0x5) => self.sub(op.x, op.y),
+            (0x8, _, _, 0x6) => self.shr(op.x),
+            (0x8, _, _, 0x7) => self.subn(op.x, op.y),
+            (0x8, _, _, 0xE) => self.shl(op.x),
+            (0x9, _, _, 0x0) => self.sne(op.x, op.y),
+            (0xA, _, _, _) => self.ldi(op.nnn),
+            (0xB, _, _, _) => self.jp0(op.nnn),
+            (0xC, _, _, _) => self.rnd(op.x, op.kk),
+            (0xD, _, _, _) => self.drw(op.x, op.y, op.n),
+            (0xE, _, 0x9, 0xE) => self.skp(op.x),
+            (0xE, _, 0xA, 0x1) => self.sknp(op.x),
+            (0xF, _, 0x0, 0x7) => self.ldxdt(op.x),
+            (0xF, _, 0x0, 0xA) => self.ldxk(op.x),
+            (0xF, _, 0x1, 0x5) => self.lddtx(op.x),
+            (0xF, _, 0x1, 0x8) => self.ldstx(op.x),
+            (0xF, _, 0x1, 0xE) => self.addi(op.x),
+            (0xF, _, 0x2, 0x9) => self.ldf(op.x),
+            (0xF, _, 0x3, 0x3) => self.ldb(op.x),
+            (0xF, _, 0x5, 0x5) => self.ldix(op.x),
+            (0xF, _, 0x6, 0x5) => self.ldxi(op.x),
+            (_, _, _, _) => panic!(
+                "Unidentified opcode: {:X} {:X} {:X} {:X}",
+                op.a, op.x, op.y, op.n
+            ),
         }
     }
 
-    fn process_opcode_8(&mut self, x: usize, y: usize, op: u8) {
-        match op {
-            0x0 => {
-                // 8xy0 - LD Vx, Vy - Set Vx := Vy
-                self.registers.v[x] = self.registers.v[y];
+    /// CLS - Clear display
+    fn cls(&mut self) {
+        for i in 0..self.display.len() {
+            for j in 0..self.display[i].len() {
+                self.display[i][j] = false;
             }
-            0x1 => {
-                // 8xy1 - OR Vx, Vy - Set Vx := Vx OR Vy
-                self.registers.v[x] |= self.registers.v[y];
-            }
-            0x2 => {
-                // 8xy2 - AND Vx, Vy - Set Vx := Vx AND Vy
-                self.registers.v[x] &= self.registers.v[y];
-            }
-            0x3 => {
-                // 8xy3 - XOR Vx, Vy - Set Vx := Vx XOR Vy
-                self.registers.v[x] ^= self.registers.v[y];
-            }
-            0x4 => {
-                // 8xy4 - ADD Vx, Vy - Set Vx := Vx + Vy, set VF := carry
-                let (val, carry) = (self.registers.v[x]).overflowing_add(self.registers.v[y]);
-                self.registers.v[x] = val;
-                if carry {
-                    self.registers.v[0xf] = 0x1;
-                } else {
-                    self.registers.v[0xf] = 0x0;
-                }
-            }
-            0x5 => {
-                // 8xy5 - SUB Vx, Vy - Set Vx := Vx - Vy, set VF := NOT borrow
-                let (val, borrow) = (self.registers.v[x]).overflowing_sub(self.registers.v[y]);
-                self.registers.v[x] = val;
-                if borrow {
-                    self.registers.v[0xf] = 0x1;
-                } else {
-                    self.registers.v[0xf] = 0x0;
-                }
-            }
-            0x6 => {
-                // 8xy6 - SHR Vx - Set Vx := Vx >> 1
-                self.registers.v[0xf] = self.registers.v[x] & 0x1;
-                self.registers.v[x] >>= 1;
-            }
-            0x7 => {
-                // 8xy7 - SUBN Vx, Vy - Set Vx := Vy - Vx, set VF := NOT borrow
-                let (val, borrow) = (self.registers.v[y]).overflowing_sub(self.registers.v[x]);
-                self.registers.v[x] = val;
-                if borrow {
-                    self.registers.v[0xf] = 0x1;
-                } else {
-                    self.registers.v[0xf] = 0x0;
-                }
-            }
-            0xe => {
-                // 8xyE - SHL Vx - Set Vx := Vx << 1
-                self.registers.v[0xf] = self.registers.v[x] & 0x8;
-                self.registers.v[x] <<= 1;
-            }
-            _ => panic!("Unhandled opcode_8: {}", op),
         }
     }
 
-    fn process_opcode_f(&mut self, x: usize, op: u8) {
-        match op {
-            0x07 => {
-                // Fx07 - LD Vx, DT - Set Vx := Delay timer value
-                self.registers.v[x] = self.registers.delay_timer;
-            }
-            0x0a => {
-                // Fx0A - LD Vx, K - Wait for a key press, store the value of the key in Vx
-                self.waiting = Some(x)
-            }
-            0x15 => {
-                // Fx15 - LD DT, Vx - Set delay timer := Vx
-                self.registers.delay_timer = self.registers.v[x];
-            }
-            0x18 => {
-                // Fx18 - LD ST, Vx - Set sound timer := Vx
-                self.registers.sound_timer = self.registers.v[x];
-            }
-            0x1e => {
-                // Fx1E - ADD I, Vx - Set I := I + Vx
-                self.registers.i += self.registers.v[x] as u16;
-            }
-            0x29 => {
-                // Fx29 - LD F, Vx - Set I := location of sprite for digit Vx
-                self.registers.i = self.registers.v[x] as u16 * 5;
-            }
-            0x33 => {
-                // Fx33 - LD B, Vx - Store BCD representation of Vx in memory locations I, I+1, and I+2
-                let mut val = self.registers.v[x];
-                let mut out = [0u8; 3]; // 0 - hundreds, 1 - tens, 2 - ones
-                for i in (0..2).rev() {
-                    if val != 0 {
-                        out[i] = (val % 10) as u8;
+    /// RET - return from subroutine
+    fn ret(&mut self) {
+        if self.registers.sp == 0 {
+            panic!("Returned when stack pointer was already 0");
+        }
+        self.registers.pc = self.registers.stack[self.registers.sp as usize];
+        self.registers.sp -= 1;
+    }
+
+    /// Legacy routine, ignored
+    fn sys(&mut self, _nnn: u16) {}
+
+    /// 1nnn - JP addr - Jump to location nnn
+    fn jp(&mut self, nnn: u16) {
+        self.registers.pc = nnn;
+    }
+
+    /// 2nnn - CALL addr - Call subroutine at nnn
+    fn call(&mut self, nnn: u16) {
+        self.registers.sp += 1;
+        self.registers.stack[self.registers.sp as usize] = self.registers.pc;
+        self.registers.pc = nnn;
+    }
+
+    /// 3xkk - SE Vx, byte - Skip next instruction if Vx = kk
+    fn sec(&mut self, x: usize, kk: u8) {
+        if self.registers.v[x] == kk {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// 4xkk - SNE Vx, byte - Skip next instruction if Vx != kk
+    fn snec(&mut self, x: usize, kk: u8) {
+        if self.registers.v[x] != kk {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// 5xy0 - SE Vx, Vy - Skip next instruction if Vx = Vy
+    fn se(&mut self, x: usize, y: usize) {
+        if self.registers.v[x] == self.registers.v[y] {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// 6xkk - LD Vx, byte - Set Vx := kk
+    fn ldc(&mut self, x: usize, kk: u8) {
+        self.registers.v[x] = kk;
+    }
+
+    /// 7xkk - ADD Vx, byte - Set Vx := Vx + kk
+    fn addc(&mut self, x: usize, kk: u8) {
+        let val = self.registers.v[x].wrapping_add(kk);
+        self.registers.v[x] = val;
+    }
+
+    /// 8xy0 - LD Vx, Vy - Set Vx := Vy
+    fn ld(&mut self, x: usize, y: usize) {
+        self.registers.v[x] = self.registers.v[y];
+    }
+
+    /// 8xy1 - OR Vx, Vy - Set Vx := Vx OR Vy
+    fn or(&mut self, x: usize, y: usize) {
+        self.registers.v[x] |= self.registers.v[y];
+    }
+
+    /// 8xy2 - AND Vx, Vy - Set Vx := Vx AND Vy
+    fn and(&mut self, x: usize, y: usize) {
+        self.registers.v[x] &= self.registers.v[y];
+    }
+
+    /// 8xy3 - XOR Vx, Vy - Set Vx := Vx XOR Vy
+    fn xor(&mut self, x: usize, y: usize) {
+        self.registers.v[x] ^= self.registers.v[y];
+    }
+
+    /// 8xy4 - ADD Vx, Vy - Set Vx := Vx + Vy, set VF := carry
+    fn add(&mut self, x: usize, y: usize) {
+        let (val, carry) = (self.registers.v[x]).overflowing_add(self.registers.v[y]);
+        self.registers.v[x] = val;
+        if carry {
+            self.registers.v[0xf] = 0x1;
+        } else {
+            self.registers.v[0xf] = 0x0;
+        }
+    }
+
+    /// 8xy5 - SUB Vx, Vy - Set Vx := Vx - Vy, set VF := NOT borrow
+    fn sub(&mut self, x: usize, y: usize) {
+        let (val, borrow) = (self.registers.v[x]).overflowing_sub(self.registers.v[y]);
+        self.registers.v[x] = val;
+        if borrow {
+            self.registers.v[0xf] = 0x1;
+        } else {
+            self.registers.v[0xf] = 0x0;
+        }
+    }
+
+    /// 8xy6 - SHR Vx - Set Vx := Vx >> 1
+    fn shr(&mut self, x: usize) {
+        self.registers.v[0xf] = self.registers.v[x] & 0x1;
+        self.registers.v[x] >>= 1;
+    }
+
+    /// 8xy7 - SUBN Vx, Vy - Set Vx := Vy - Vx, set VF := NOT borrow
+    fn subn(&mut self, x: usize, y: usize) {
+        let (val, borrow) = (self.registers.v[y]).overflowing_sub(self.registers.v[x]);
+        self.registers.v[x] = val;
+        if borrow {
+            self.registers.v[0xf] = 0x1;
+        } else {
+            self.registers.v[0xf] = 0x0;
+        }
+    }
+
+    /// 8xyE - SHL Vx - Set Vx := Vx << 1
+    fn shl(&mut self, x: usize) {
+        self.registers.v[0xf] = self.registers.v[x] & 0x8;
+        self.registers.v[x] <<= 1;
+    }
+
+    /// 9xy0 - SNE Vx, Vy - Skip next instruction if Vx != Vy
+    fn sne(&mut self, x: usize, y: usize) {
+        if self.registers.v[x] != self.registers.v[y] {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// Annn - LD I, addr - Set I := nnn
+    fn ldi(&mut self, nnn: u16) {
+        self.registers.i = nnn;
+    }
+
+    /// Bnnn - JP V0, addr - Jump to location nnn + V0
+    fn jp0(&mut self, nnn: u16) {
+        self.registers.pc = nnn + self.registers.v[0] as u16;
+    }
+
+    /// Cxkk - RND Vx, byte - Set Vx := random byte AND kk
+    fn rnd(&mut self, x: usize, kk: u8) {
+        let mut rng = rand::thread_rng();
+        self.registers.v[x] = rng.gen::<u8>() & kk;
+    }
+
+    /// Dxyn - DRW Vx, Vy, nibble - Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
+    fn drw(&mut self, x: usize, y: usize, n: u8) {
+        let mut collision = false;
+        for i in 0..n as usize {
+            let i_offset = self.registers.v[y] as usize + i;
+            let sprite = self.memory[self.registers.i as usize + i];
+            for j in 0..8 {
+                let j_offset = self.registers.v[x] as usize + j;
+                let pixel = (sprite >> (7 - j)) & 0x1;
+
+                if pixel == 0x1 {
+                    if self.display[i_offset][j_offset] {
+                        collision = true;
                     }
-                    val /= 10;
-                }
-                let addr = self.registers.i as usize;
-                self.memory[addr..addr + 3].copy_from_slice(&out[..]);
-            }
-            0x55 => {
-                // Fx55 - LD [I], Vx - Store registers V0 through Vx, in memory starting at location I
-                for i in 0..=x {
-                    self.memory[self.registers.i as usize + i] = self.registers.v[i];
+                    self.display[i_offset][j_offset] ^= true;
                 }
             }
-            0x65 => {
-                // Fx65 - LD Vx, [I] - Read registers V0 through Vx from memory starting at location I
-                for i in 0..=x {
-                    self.registers.v[i] = self.memory[self.registers.i as usize + i];
-                }
-            }
-            _ => panic!("Unhandled opcode_f: {}", op),
+        }
+        if collision {
+            self.registers.v[0xF] = 1;
+        } else {
+            self.registers.v[0xF] = 0;
         }
     }
-}
 
-/// Gets the nibble corresponding to the zero-based index of the set of four bits in the u16.
-///
-/// Indexes are laid out as 3333_2222_1111_0000 where the least siginificant four bits are 0 and
-/// the most significan four bits are 3.
-fn get_nibble(index: u8, value: u16) -> usize {
-    let offset = index * 4;
-    ((value & (0xf << offset)) >> offset) as usize
+    /// Ex9E - SKP Vx - Skip next instruction if key with the value of Vx is pressed
+    fn skp(&mut self, x: usize) {
+        if self.key_state[self.registers.v[x] as usize] {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// ExA1 - SKNP Vx - Skip next instruction if key with value of Vx is not pressed
+    fn sknp(&mut self, x: usize) {
+        if !self.key_state[self.registers.v[x] as usize] {
+            self.registers.pc += 2;
+        }
+    }
+
+    /// Fx07 - LD Vx, DT - Set Vx := Delay timer value
+    fn ldxdt(&mut self, x: usize) {
+        self.registers.v[x] = self.registers.delay_timer;
+    }
+
+    /// Fx0A - LD Vx, K - Wait for a key press, store the value of the key in Vx
+    fn ldxk(&mut self, x: usize) {
+        self.waiting = Some(x)
+    }
+
+    /// Fx15 - LD DT, Vx - Set delay timer := Vx
+    fn lddtx(&mut self, x: usize) {
+        self.registers.delay_timer = self.registers.v[x];
+    }
+
+    /// Fx18 - LD ST, Vx - Set sound timer := Vx
+    fn ldstx(&mut self, x: usize) {
+        self.registers.sound_timer = self.registers.v[x];
+    }
+
+    /// Fx1E - ADD I, Vx - Set I := I + Vx
+    fn addi(&mut self, x: usize) {
+        self.registers.i += self.registers.v[x] as u16;
+    }
+
+    /// Fx29 - LD F, Vx - Set I := location of sprite for digit Vx
+    fn ldf(&mut self, x: usize) {
+        self.registers.i = self.registers.v[x] as u16 * 5;
+    }
+
+    /// Fx33 - LD B, Vx - Store BCD representation of Vx in memory locations I, I+1, and I+2
+    fn ldb(&mut self, x: usize) {
+        let mut val = self.registers.v[x];
+        let mut out = [0u8; 3]; // 0 - hundreds, 1 - tens, 2 - ones
+        for i in (0..2).rev() {
+            if val != 0 {
+                out[i] = (val % 10) as u8;
+            }
+            val /= 10;
+        }
+        let addr = self.registers.i as usize;
+        self.memory[addr..addr + 3].copy_from_slice(&out[..]);
+    }
+
+    /// Fx55 - LD [I], Vx - Store registers V0 through Vx, in memory starting at location I
+    fn ldix(&mut self, x: usize) {
+        for i in 0..=x {
+            self.memory[self.registers.i as usize + i] = self.registers.v[i];
+        }
+    }
+
+    /// Fx65 - LD Vx, [I] - Read registers V0 through Vx from memory starting at location I
+    fn ldxi(&mut self, x: usize) {
+        for i in 0..=x {
+            self.registers.v[i] = self.memory[self.registers.i as usize + i];
+        }
+    }
 }
