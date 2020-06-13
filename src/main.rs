@@ -14,7 +14,7 @@ const PIXEL_SIZE: usize = 10;
 const SCREEN_WIDTH: usize = cpu::C8_WIDTH * PIXEL_SIZE;
 const SCREEN_HEIGHT: usize = cpu::C8_HEIGHT * PIXEL_SIZE;
 
-const MS_PER_UPDATE: u64 = (1000.0 / 60.0) as u64;
+const MS_PER_UPDATE: u64 = 2 as u64; // 500hz suggested cycle rate
 
 struct MainState {
     cpu: cpu::Cpu,
