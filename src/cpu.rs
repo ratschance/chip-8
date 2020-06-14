@@ -10,6 +10,7 @@ pub struct Cpu {
     key_state: [bool; 16],
     waiting: Option<usize>,
     has_disp_update: bool,
+    cycle_count: usize,
 }
 
 struct Registers {
@@ -67,6 +68,7 @@ impl Cpu {
             key_state: [false; 16],
             waiting: None,
             has_disp_update: false,
+            cycle_count: 0,
         }
     }
 
@@ -107,6 +109,12 @@ impl Cpu {
         if self.waiting == None {
             self.has_disp_update = false;
 
+            let pc = self.registers.pc as usize;
+            self.registers.pc += 2;
+            self.process_opcode((self.memory[pc] as u16) << 8 | self.memory[pc + 1] as u16);
+        }
+
+        if self.cycle_count % 8 == 0 {
             if self.registers.delay_timer > 0 {
                 self.registers.delay_timer -= 1;
             }
@@ -115,11 +123,8 @@ impl Cpu {
                 //TODO: Make sound
                 self.registers.sound_timer -= 1;
             }
-
-            let pc = self.registers.pc as usize;
-            self.registers.pc += 2;
-            self.process_opcode((self.memory[pc] as u16) << 8 | self.memory[pc + 1] as u16);
         }
+        self.cycle_count += 1;
     }
 
     pub fn view_display(&mut self) -> &[[bool; C8_WIDTH]; C8_HEIGHT] {
