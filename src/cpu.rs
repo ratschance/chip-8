@@ -403,7 +403,14 @@ impl Cpu {
 
     /// Fx1E - ADD I, Vx - Set I := I + Vx
     fn addi(&mut self, x: usize) {
-        self.registers.i += self.registers.v[x] as u16;
+        //self.registers.i += self.registers.v[x] as u16;
+        let (val, carry) = self.registers.i.overflowing_add(self.registers.v[x] as u16);
+        self.registers.i = val;
+        if carry {
+            self.registers.v[0xf] = 1;
+        } else {
+            self.registers.v[0xf] = 0;
+        }
     }
 
     /// Fx29 - LD F, Vx - Set I := location of sprite for digit Vx
