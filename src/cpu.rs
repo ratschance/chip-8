@@ -199,6 +199,7 @@ impl Cpu {
                 self.display[i][j] = false;
             }
         }
+        self.has_disp_update = true;
     }
 
     /// RET - return from subroutine
