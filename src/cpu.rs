@@ -319,7 +319,7 @@ impl Cpu {
 
     /// 8xyE - SHL Vx - Set Vx := Vx << 1
     fn shl(&mut self, x: usize) {
-        self.registers.v[0xf] = self.registers.v[x] & 0x8;
+        self.registers.v[0xf] = (self.registers.v[x] & 0x80) >> 7;
         self.registers.v[x] <<= 1;
     }
 
