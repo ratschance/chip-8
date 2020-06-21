@@ -348,26 +348,21 @@ impl Cpu {
 
     /// Dxyn - DRW Vx, Vy, nibble - Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
     fn drw(&mut self, x: usize, y: usize, n: u8) {
-        let mut collision = false;
+        self.registers.v[0xF] = 0;
         for i in 0..n as usize {
-            let i_offset = self.registers.v[y] as usize + i;
+            let i_offset = (self.registers.v[y] as usize + i) % C8_HEIGHT;
             let sprite = self.memory[self.registers.i as usize + i];
             for j in 0..8 {
-                let j_offset = self.registers.v[x] as usize + j;
+                let j_offset = (self.registers.v[x] as usize + j) % C8_WIDTH;
                 let pixel = (sprite >> (7 - j)) & 0x1;
 
                 if pixel == 0x1 {
                     if self.display[i_offset][j_offset] {
-                        collision = true;
+                        self.registers.v[0xF] = 1;
                     }
                     self.display[i_offset][j_offset] ^= true;
                 }
             }
-        }
-        if collision {
-            self.registers.v[0xF] = 1;
-        } else {
-            self.registers.v[0xF] = 0;
         }
         self.has_disp_update = true;
     }
