@@ -422,7 +422,7 @@ impl Cpu {
     fn ldb(&mut self, x: usize) {
         let mut val = self.registers.v[x];
         let mut out = [0u8; 3]; // 0 - hundreds, 1 - tens, 2 - ones
-        for i in (0..2).rev() {
+        for i in (0..=2).rev() {
             if val != 0 {
                 out[i] = (val % 10) as u8;
             }
@@ -444,5 +444,34 @@ impl Cpu {
         for i in 0..=x {
             self.registers.v[i] = self.memory[self.registers.i as usize + i];
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bcd() {
+        let mut c8 = Cpu::initialize();
+        c8.registers.i = 0;
+        c8.registers.v[0] = 123;
+        c8.registers.v[1] = 1;
+        c8.registers.v[2] = 45;
+
+        c8.ldb(0);
+        assert_eq!(1, c8.memory[0]);
+        assert_eq!(2, c8.memory[1]);
+        assert_eq!(3, c8.memory[2]);
+
+        c8.ldb(1);
+        assert_eq!(0, c8.memory[0]);
+        assert_eq!(0, c8.memory[1]);
+        assert_eq!(1, c8.memory[2]);
+
+        c8.ldb(2);
+        assert_eq!(0, c8.memory[0]);
+        assert_eq!(4, c8.memory[1]);
+        assert_eq!(5, c8.memory[2]);
     }
 }
