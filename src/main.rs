@@ -46,23 +46,25 @@ impl event::EventHandler for MainState {
         if self.cpu.has_disp_update() {
             graphics::clear(ctx, [0.0, 0.0, 0.0, 0.0].into());
             let display = self.cpu.view_display();
+            let rect_bounds = graphics::Rect::new_i32(0, 0, PIXEL_SIZE as i32, PIXEL_SIZE as i32);
+            let filled_rect = graphics::Mesh::new_rectangle(
+                ctx,
+                graphics::DrawMode::fill(),
+                rect_bounds,
+                graphics::WHITE,
+            )?;
 
             for i in 0..display.len() {
                 for j in 0..display[i].len() {
                     if display[i][j] {
-                        let rect_bounds = graphics::Rect::new_i32(
-                            (j * PIXEL_SIZE) as i32,
-                            (i * PIXEL_SIZE) as i32,
-                            PIXEL_SIZE as i32,
-                            PIXEL_SIZE as i32,
-                        );
-                        let filled_rect = graphics::Mesh::new_rectangle(
+                        graphics::draw(
                             ctx,
-                            graphics::DrawMode::fill(),
-                            rect_bounds,
-                            graphics::WHITE,
+                            &filled_rect,
+                            (ggez::nalgebra::Point2::new(
+                                (j * PIXEL_SIZE) as f32,
+                                (i * PIXEL_SIZE) as f32,
+                            ),),
                         )?;
-                        graphics::draw(ctx, &filled_rect, (ggez::nalgebra::Point2::new(0.0, 0.0),))?;
                     }
                 }
             }
