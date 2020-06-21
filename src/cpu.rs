@@ -294,9 +294,9 @@ impl Cpu {
         let (val, borrow) = (self.registers.v[x]).overflowing_sub(self.registers.v[y]);
         self.registers.v[x] = val;
         if borrow {
-            self.registers.v[0xf] = 0x1;
-        } else {
             self.registers.v[0xf] = 0x0;
+        } else {
+            self.registers.v[0xf] = 0x1;
         }
     }
 
@@ -311,9 +311,9 @@ impl Cpu {
         let (val, borrow) = (self.registers.v[y]).overflowing_sub(self.registers.v[x]);
         self.registers.v[x] = val;
         if borrow {
-            self.registers.v[0xf] = 0x1;
-        } else {
             self.registers.v[0xf] = 0x0;
+        } else {
+            self.registers.v[0xf] = 0x1;
         }
     }
 
