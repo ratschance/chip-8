@@ -28,7 +28,6 @@ impl MainState {
             last_update: Instant::now(),
         };
         s.cpu.load_rom(rom);
-        s.cpu.load_sprites();
         Ok(s)
     }
 }

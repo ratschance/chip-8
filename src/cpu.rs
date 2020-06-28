@@ -61,7 +61,7 @@ impl Opcode {
 
 impl Cpu {
     pub fn initialize() -> Cpu {
-        Cpu {
+        let mut cpu = Cpu {
             registers: Registers::initialize(),
             memory: [0; 4096],
             display: [[false; C8_WIDTH]; C8_HEIGHT],
@@ -69,7 +69,9 @@ impl Cpu {
             waiting: None,
             has_disp_update: false,
             cycle_count: 0,
-        }
+        };
+        cpu.load_sprites();
+        cpu
     }
 
     pub fn load_rom(&mut self, path: &str) {
@@ -83,7 +85,8 @@ impl Cpu {
             .expect("Unable to read ROM into memory");
     }
 
-    pub fn load_sprites(&mut self) {
+    /// Load the pre-defined sprites into memory
+    fn load_sprites(&mut self) {
         let sprites = [
             0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
             0x20, 0x60, 0x20, 0x20, 0x70, // 1
