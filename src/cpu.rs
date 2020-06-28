@@ -420,16 +420,11 @@ impl Cpu {
 
     /// Fx33 - LD B, Vx - Store BCD representation of Vx in memory locations I, I+1, and I+2
     fn ldb(&mut self, x: usize) {
-        let mut val = self.registers.v[x];
-        let mut out = [0u8; 3]; // 0 - hundreds, 1 - tens, 2 - ones
-        for i in (0..=2).rev() {
-            if val != 0 {
-                out[i] = (val % 10) as u8;
-            }
-            val /= 10;
-        }
+        let val = self.registers.v[x];
         let addr = self.registers.i as usize;
-        self.memory[addr..addr + 3].copy_from_slice(&out[..]);
+        self.memory[addr] = val / 100;
+        self.memory[addr + 1] = val / 10 % 10;
+        self.memory[addr + 2] = val % 10;
     }
 
     /// Fx55 - LD [I], Vx - Store registers V0 through Vx, in memory starting at location I
