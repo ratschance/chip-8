@@ -22,6 +22,12 @@ struct MainState {
 }
 
 impl MainState {
+
+    /// Creates a new MainState, initializes the CPU and loads a ROM based on the passed filepath
+    ///
+    /// # Arguments
+    ///
+    /// * `rom` - Path to ROM file. Will panic if file does not exist
     fn new(rom: &str) -> GameResult<MainState> {
         let mut s = MainState {
             cpu: cpu::Cpu::initialize(),
@@ -92,13 +98,13 @@ impl event::EventHandler for MainState {
     }
 }
 
+/// Map keyboard keys to Chip-8 keys
+///
+///  1 2 3 4    1 2 3 C
+///  q w e r -> 4 5 6 D
+///  a s d f    7 8 9 E
+///  z x c v    A 0 B F
 fn get_idx_from_keycode(keycode: KeyCode) -> Option<usize> {
-    // Map keyboard keys to Chip-8 keys
-    //
-    //  1 2 3 4    1 2 3 C
-    //  q w e r -> 4 5 6 D
-    //  a s d f    7 8 9 E
-    //  z x c v    A 0 B F
     let key = match keycode {
         KeyCode::Key1 => 1,
         KeyCode::Key2 => 2,

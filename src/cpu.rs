@@ -3,27 +3,40 @@ use rand::Rng;
 pub const C8_WIDTH: usize = 64;
 pub const C8_HEIGHT: usize = 32;
 
+/// Chip-8 "CPU". Contains the registers, memory, and peripherals necessary for operation
 pub struct Cpu {
     registers: Registers,
     memory: [u8; 4096],
     display: [[bool; C8_WIDTH]; C8_HEIGHT],
+    /// Array to store the current state of all keys
     key_state: [bool; 16],
+    /// Option used to for blocking operations that wait for user input. While waiting, the requesting register index is stored
     waiting: Option<usize>,
+    /// Flag to limit screen updates to only run when changes have occured. Set by the draw and clear screen instructions
     has_disp_update: bool,
+    /// Counter for the number of cycles. Used to limit the rate of the delay and audio timers
     cycle_count: usize,
 }
 
+/// Registers for the Chip-8
 struct Registers {
-    v: [u8; 16], // Vx where x is a hexadecimal digit 0..F
-    i: u16,      // Generally used to store memory addresses
+    /// Array of general purpose registers in form: Vx where x is a hexadecimal digit 0..F
+    v: [u8; 16],
+    /// I register. Generally used to store memory addresses
+    i: u16,
+    /// Delay timer. Set by user, decremented automatically at 60hz
     delay_timer: u8,
+    /// Sound timer. Set by user, decremented automatically at 60hz
     sound_timer: u8,
-    pc: u16, // Program Counter - used to store currently executing address
-    sp: u8,  // Stack Pointer - used to point to the topmost level of the stack
+    /// Program Counter
+    pc: u16,
+    /// Stack Pointer
+    sp: u8,
     stack: [u16; 16],
 }
 
 impl Registers {
+    /// Returns an initialized set of registers at their default values.
     fn initialize() -> Registers {
         Registers {
             v: [0; 16],
@@ -37,16 +50,30 @@ impl Registers {
     }
 }
 
+/// Helper struct that stores all parts of an opcode that could be used for any Chip-8 Operation. Names were chosen to
+/// match the names used in the Chip-8 instruction set. Positions of each attribute in a u16 are documented below with
+///  Z's representing "Don't care" nibbles.
 struct Opcode {
+    /// aZZZ
     a: u8,
+    /// ZZkk
     kk: u8,
+    /// ZZZn
     n: u8,
+    /// Znnn
     nnn: u16,
+    /// ZxZZ
     x: usize,
+    /// ZZyZ
     y: usize,
 }
 
 impl Opcode {
+    /// Returns a decoded Opcode based on the passed u16
+    ///
+    /// # Arguments
+    ///
+    /// * `op` - A u16 opcode to break apart
     pub fn from_op(op: u16) -> Self {
         Opcode {
             a: (op >> 12 & 0xf) as u8,
@@ -60,6 +87,7 @@ impl Opcode {
 }
 
 impl Cpu {
+    /// Returns an initialized Chip-8 "CPU" with its default values
     pub fn initialize() -> Cpu {
         let mut cpu = Cpu {
             registers: Registers::initialize(),
@@ -74,6 +102,11 @@ impl Cpu {
         cpu
     }
 
+    /// Loads a ROM into memory
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - String slice that holds the path to the ROM file
     pub fn load_rom(&mut self, path: &str) {
         use std::fs::File;
         use std::io::prelude::*;
@@ -108,6 +141,9 @@ impl Cpu {
         self.memory[..sprites.len()].copy_from_slice(&sprites[..])
     }
 
+    /// Perform a single tick of the Chip-8. If the system is not currently waiting for user input, this function will
+    /// pull a u16 from the memory location pointed to by the program counter, increment the program counter, run the
+    /// opcode, and decrement the timers. If the system is waiting for input, only the timers will be operated.
     pub fn tick(&mut self) {
         if self.waiting == None {
             self.has_disp_update = false;
@@ -130,10 +166,17 @@ impl Cpu {
         self.cycle_count += 1;
     }
 
+    /// Get a non-mutable reference to the display so it can be viewed by a rendering routine.
     pub fn view_display(&mut self) -> &[[bool; C8_WIDTH]; C8_HEIGHT] {
         &self.display
     }
 
+    /// Set the key at the specified index as pressed. If the system was waiting for the user to press a key, the
+    /// requesting register will be set with the key index and the `waiting` flag will be cleared.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Index of the key to set as pressed
     pub fn set_key_pressed(&mut self, key: usize) {
         self.key_state[key] = true;
         if let Some(x) = self.waiting {
@@ -142,14 +185,30 @@ impl Cpu {
         }
     }
 
+    /// Set the key at the specified index as released.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - Index of the key to set as released
     pub fn set_key_released(&mut self, key: usize) {
         self.key_state[key] = false;
     }
 
+    /// Check whether the system has a display update available
+    ///
+    /// # Returns
+    ///
+    /// * `has_disp_update` - True if a display update was performed in the past tick. False otherwise.
     pub fn has_disp_update(&self) -> bool {
         self.has_disp_update
     }
 
+    /// Process a single opcode. Matches the opcode against the decoding table and calls the correct operation with the
+    /// necessary arguments.
+    ///
+    /// # Arguments
+    ///
+    /// * `opcode` - A single Chip-8 opcode. Invalid opcodes will panic.
     fn process_opcode(&mut self, opcode: u16) {
         let op = Opcode::from_op(opcode);
         match (op.a, op.x, op.y, op.n) {
