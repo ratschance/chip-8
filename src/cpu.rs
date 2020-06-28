@@ -344,22 +344,14 @@ impl Cpu {
     fn add(&mut self, x: usize, y: usize) {
         let (val, carry) = (self.registers.v[x]).overflowing_add(self.registers.v[y]);
         self.registers.v[x] = val;
-        if carry {
-            self.registers.v[0xf] = 0x1;
-        } else {
-            self.registers.v[0xf] = 0x0;
-        }
+        self.registers.v[0xf] = carry as u8;
     }
 
     /// 8xy5 - SUB Vx, Vy - Set Vx := Vx - Vy, set VF := NOT borrow
     fn sub(&mut self, x: usize, y: usize) {
         let (val, borrow) = (self.registers.v[x]).overflowing_sub(self.registers.v[y]);
         self.registers.v[x] = val;
-        if borrow {
-            self.registers.v[0xf] = 0x0;
-        } else {
-            self.registers.v[0xf] = 0x1;
-        }
+        self.registers.v[0xf] = !borrow as u8;
     }
 
     /// 8xy6 - SHR Vx - Set Vx := Vx >> 1
@@ -372,11 +364,7 @@ impl Cpu {
     fn subn(&mut self, x: usize, y: usize) {
         let (val, borrow) = (self.registers.v[y]).overflowing_sub(self.registers.v[x]);
         self.registers.v[x] = val;
-        if borrow {
-            self.registers.v[0xf] = 0x0;
-        } else {
-            self.registers.v[0xf] = 0x1;
-        }
+        self.registers.v[0xf] = !borrow as u8;
     }
 
     /// 8xyE - SHL Vx - Set Vx := Vx << 1
@@ -468,11 +456,7 @@ impl Cpu {
         //self.registers.i += self.registers.v[x] as u16;
         let (val, carry) = self.registers.i.overflowing_add(self.registers.v[x] as u16);
         self.registers.i = val;
-        if carry {
-            self.registers.v[0xf] = 1;
-        } else {
-            self.registers.v[0xf] = 0;
-        }
+        self.registers.v[0xf] = carry as u8;
     }
 
     /// Fx29 - LD F, Vx - Set I := location of sprite for digit Vx
@@ -509,6 +493,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_add() {
+        // 8xy4 - ADD Vx, Vy - Set Vx := Vx + Vy, set VF := carry
+        let mut c8 = Cpu::initialize();
+
+        c8.registers.v[0] = 10;
+        c8.registers.v[1] = 15;
+        c8.add(0, 1);
+        assert_eq!(25, c8.registers.v[0]);
+        assert_eq!(0, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 254;
+        c8.registers.v[1] = 1;
+        c8.add(0, 1);
+        assert_eq!(255, c8.registers.v[0]);
+        assert_eq!(0, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 255;
+        c8.registers.v[1] = 1;
+        c8.add(0, 1);
+        assert_eq!(0, c8.registers.v[0]);
+        assert_eq!(1, c8.registers.v[0xf]);
+    }
+
+    #[test]
+    fn test_addi() {
+        // Fx1E - ADD I, Vx - Set I := I + Vx
+        let mut c8 = Cpu::initialize();
+
+        c8.registers.i = 15;
+        c8.registers.v[0] = 10;
+        c8.addi(0);
+        assert_eq!(25, c8.registers.i);
+        assert_eq!(0, c8.registers.v[0xf]);
+
+        c8.registers.i = 65534;
+        c8.registers.v[0] = 1;
+        c8.addi(0);
+        assert_eq!(65535, c8.registers.i);
+        assert_eq!(0, c8.registers.v[0xf]);
+
+        c8.registers.i = 65535;
+        c8.registers.v[0] = 1;
+        c8.addi(0);
+        assert_eq!(0, c8.registers.i);
+        assert_eq!(1, c8.registers.v[0xf]);
+    }
+
+    #[test]
     fn test_bcd() {
         let mut c8 = Cpu::initialize();
         c8.registers.i = 0;
@@ -530,5 +562,53 @@ mod tests {
         assert_eq!(0, c8.memory[0]);
         assert_eq!(4, c8.memory[1]);
         assert_eq!(5, c8.memory[2]);
+    }
+
+    #[test]
+    fn test_sub() {
+        // 8xy5 - SUB Vx, Vy - Set Vx := Vx - Vy, set VF := NOT borrow
+        let mut c8 = Cpu::initialize();
+
+        c8.registers.v[0] = 15;
+        c8.registers.v[1] = 10;
+        c8.sub(0, 1);
+        assert_eq!(5, c8.registers.v[0]);
+        assert_eq!(1, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 1;
+        c8.registers.v[1] = 1;
+        c8.sub(0, 1);
+        assert_eq!(0, c8.registers.v[0]);
+        assert_eq!(1, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 1;
+        c8.registers.v[1] = 2;
+        c8.sub(0, 1);
+        assert_eq!(255, c8.registers.v[0]);
+        assert_eq!(0, c8.registers.v[0xf]);
+    }
+
+    #[test]
+    fn test_subn() {
+        // 8xy7 - SUBN Vx, Vy - Set Vx := Vy - Vx, set VF := NOT borrow
+        let mut c8 = Cpu::initialize();
+
+        c8.registers.v[0] = 10;
+        c8.registers.v[1] = 15;
+        c8.subn(0, 1);
+        assert_eq!(5, c8.registers.v[0]);
+        assert_eq!(1, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 1;
+        c8.registers.v[1] = 1;
+        c8.subn(0, 1);
+        assert_eq!(0, c8.registers.v[0]);
+        assert_eq!(1, c8.registers.v[0xf]);
+
+        c8.registers.v[0] = 2;
+        c8.registers.v[1] = 1;
+        c8.subn(0, 1);
+        assert_eq!(255, c8.registers.v[0]);
+        assert_eq!(0, c8.registers.v[0xf]);
     }
 }
