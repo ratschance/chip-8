@@ -19,6 +19,8 @@ const MS_PER_UPDATE: u64 = 2 as u64; // 500hz suggested cycle rate
 struct MainState {
     cpu: cpu::Cpu,
     last_update: Instant,
+    // Keep last three frames to smooth animation by taking the logical or of each pixel
+    last_frames: [[[bool; cpu::C8_WIDTH]; cpu::C8_HEIGHT]; 3],
 }
 
 impl MainState {
@@ -32,6 +34,7 @@ impl MainState {
         let mut s = MainState {
             cpu: cpu::Cpu::initialize(),
             last_update: Instant::now(),
+            last_frames: [[[false; cpu::C8_WIDTH]; cpu::C8_HEIGHT]; 3]
         };
         s.cpu.load_rom(rom);
         Ok(s)
@@ -50,7 +53,7 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         if self.cpu.has_disp_update() {
             graphics::clear(ctx, [0.0, 0.0, 0.0, 0.0].into());
-            let display = self.cpu.view_display();
+            self.last_frames[2].copy_from_slice(self.cpu.view_display());
             let rect_bounds = graphics::Rect::new_i32(0, 0, PIXEL_SIZE as i32, PIXEL_SIZE as i32);
             let filled_rect = graphics::Mesh::new_rectangle(
                 ctx,
@@ -59,9 +62,9 @@ impl event::EventHandler for MainState {
                 graphics::WHITE,
             )?;
 
-            for i in 0..display.len() {
-                for j in 0..display[i].len() {
-                    if display[i][j] {
+            for i in 0..cpu::C8_HEIGHT {
+                for j in 0..cpu::C8_WIDTH {
+                    if self.last_frames[0][i][j] | self.last_frames[1][i][j] | self.last_frames[2][i][j]{
                         graphics::draw(
                             ctx,
                             &filled_rect,
@@ -75,6 +78,9 @@ impl event::EventHandler for MainState {
             }
 
             graphics::present(ctx)?;
+        } else {
+            self.last_frames[0] = self.last_frames[1];
+            self.last_frames[1] = self.last_frames[2];
         }
         Ok(())
     }
