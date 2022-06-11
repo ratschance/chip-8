@@ -1,8 +1,8 @@
 [package]
 name = "chip-8"
-version = "0.1.0"
-authors = ["Conrad Ratschan <conrad.ratschan@gmail.com>"]
+version = "0.1.1"
+authors = ["Conrad Ratschan <ratschance@gmail.com>"]
 
 [dependencies]
-ggez = "0.5"
-rand = "0.7.3"
+ggez = "0.7"
+rand = "0.8"

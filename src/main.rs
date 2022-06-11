@@ -7,14 +7,14 @@ extern crate rand;
 use std::time::{Duration, Instant};
 
 use ggez::event::{self, KeyCode, KeyMods};
-use ggez::graphics;
+use ggez::graphics::{self, Color};
 use ggez::{Context, GameResult};
 
 const PIXEL_SIZE: usize = 10;
 const SCREEN_WIDTH: usize = cpu::C8_WIDTH * PIXEL_SIZE;
 const SCREEN_HEIGHT: usize = cpu::C8_HEIGHT * PIXEL_SIZE;
 
-const MS_PER_UPDATE: u64 = 2 as u64; // 500hz suggested cycle rate
+const MS_PER_UPDATE: u64 = 2_u64; // 500hz suggested cycle rate
 
 struct MainState {
     cpu: cpu::Cpu,
@@ -24,7 +24,6 @@ struct MainState {
 }
 
 impl MainState {
-
     /// Creates a new MainState, initializes the CPU and loads a ROM based on the passed filepath
     ///
     /// # Arguments
@@ -34,14 +33,14 @@ impl MainState {
         let mut s = MainState {
             cpu: cpu::Cpu::initialize(),
             last_update: Instant::now(),
-            last_frames: [[[false; cpu::C8_WIDTH]; cpu::C8_HEIGHT]; 3]
+            last_frames: [[[false; cpu::C8_WIDTH]; cpu::C8_HEIGHT]; 3],
         };
         s.cpu.load_rom(rom);
         Ok(s)
     }
 }
 
-impl event::EventHandler for MainState {
+impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if Instant::now() - self.last_update >= Duration::from_millis(MS_PER_UPDATE) {
             self.last_update = Instant::now();
@@ -59,19 +58,22 @@ impl event::EventHandler for MainState {
                 ctx,
                 graphics::DrawMode::fill(),
                 rect_bounds,
-                graphics::WHITE,
+                Color::WHITE,
             )?;
 
             for i in 0..cpu::C8_HEIGHT {
                 for j in 0..cpu::C8_WIDTH {
-                    if self.last_frames[0][i][j] | self.last_frames[1][i][j] | self.last_frames[2][i][j]{
+                    if self.last_frames[0][i][j]
+                        | self.last_frames[1][i][j]
+                        | self.last_frames[2][i][j]
+                    {
                         graphics::draw(
                             ctx,
                             &filled_rect,
-                            (ggez::nalgebra::Point2::new(
-                                (j * PIXEL_SIZE) as f32,
-                                (i * PIXEL_SIZE) as f32,
-                            ),),
+                            (ggez::mint::Point2 {
+                                x: (j * PIXEL_SIZE) as f32,
+                                y: (i * PIXEL_SIZE) as f32,
+                            },),
                         )?;
                     }
                 }
@@ -147,7 +149,7 @@ fn main() -> GameResult {
             height: SCREEN_HEIGHT as f32,
             ..Default::default()
         });
-    let (ctx, event_loop) = &mut cb.build()?;
-    let state = &mut MainState::new(&args[1])?;
+    let (ctx, event_loop) = cb.build()?;
+    let state = MainState::new(&args[1])?;
     event::run(ctx, event_loop, state)
 }
